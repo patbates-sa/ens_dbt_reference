@@ -7,3 +7,5 @@ profiles.yml
 __pycache__/
 .DS_Store
 dbt_internal_packages/
+CLAUDE.md
+.jira/.gitignore
