@@ -1,0 +1,39 @@
+version: 2
+
+# Four metrics. The point of this file is that it is short -- the customer's
+# semantic layer question on 7/28 was really a question about effort.
+# Ask which fifth metric his leadership asks for most, and add it live.
+
+metrics:
+
+  - name: incident_count
+    label: "Incidents"
+    description: "Count of incidents, sliceable by severity, assignment group, site, region and device class."
+    type: simple
+    type_params:
+      measure: incident_count
+
+  - name: mean_time_to_resolve
+    label: "Mean time to resolve (minutes)"
+    description: "Average resolution time in minutes across resolved incidents."
+    type: ratio
+    type_params:
+      numerator: total_minutes_to_resolve
+      denominator: resolved_incident_count
+
+  - name: pct_incidents_during_change_window
+    label: "% incidents during a change window"
+    description: >
+      Share of incidents that opened inside an active change window. The
+      one-line answer to a question the organisation asks constantly.
+    type: ratio
+    type_params:
+      numerator: incidents_during_change_window
+      denominator: incident_count
+
+  - name: peak_utilization
+    label: "Peak utilization %"
+    description: "Maximum outbound interface utilization over the selected window."
+    type: simple
+    type_params:
+      measure: peak_utilization

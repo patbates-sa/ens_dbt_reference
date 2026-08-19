@@ -1,0 +1,119 @@
+version: 2
+
+semantic_models:
+
+  - name: incidents
+    description: "Incident grain with telemetry and change-window context."
+    model: ref('fct_incident_telemetry_correlation')
+    defaults:
+      agg_time_dimension: opened_at
+
+    entities:
+      - name: incident
+        type: primary
+        expr: incident_number
+      - name: device
+        type: foreign
+        expr: device_id
+
+    dimensions:
+      - name: opened_at
+        type: time
+        expr: opened_ts
+        type_params:
+          time_granularity: day
+      - name: incident_severity
+        type: categorical
+      - name: assignment_group
+        type: categorical
+      - name: match_method
+        type: categorical
+      - name: opened_during_change_window
+        type: categorical
+      - name: had_elevated_utilization
+        type: categorical
+
+    measures:
+      - name: incident_count
+        description: "Count of incidents."
+        agg: count
+        expr: incident_number
+
+      - name: resolved_incident_count
+        description: "Incidents with a resolved timestamp."
+        agg: count
+        expr: case when not is_open then incident_number end
+
+      - name: total_minutes_to_resolve
+        description: "Sum of resolution time in minutes, resolved incidents only."
+        agg: sum
+        expr: coalesce(minutes_to_resolve, 0)
+
+      - name: incidents_during_change_window
+        description: "Incidents that opened inside an active change window."
+        agg: sum
+        expr: case when opened_during_change_window then 1 else 0 end
+
+  - name: devices
+    description: "Device dimension. Joins to incidents and interface performance."
+    model: ref('dim_device')
+
+    entities:
+      - name: device
+        type: primary
+        expr: device_id
+
+    dimensions:
+      - name: device_class
+        type: categorical
+      - name: vendor
+        type: categorical
+      - name: owning_team
+        type: categorical
+      - name: environment
+        type: categorical
+      - name: site_code
+        type: categorical
+      - name: site_region
+        type: categorical
+
+    measures:
+      - name: device_count
+        agg: count_distinct
+        expr: device_id
+
+  - name: interface_performance
+    description: "Hourly interface performance."
+    model: ref('fct_interface_performance_hourly')
+    defaults:
+      agg_time_dimension: metric_hour_ts
+
+    entities:
+      - name: interface
+        type: primary
+        expr: interface_id
+      - name: device
+        type: foreign
+        expr: device_id
+
+    dimensions:
+      - name: metric_hour_ts
+        type: time
+        expr: metric_hour
+        type_params:
+          time_granularity: hour
+      - name: device_class
+        type: categorical
+      - name: owning_team
+        type: categorical
+      - name: site_region
+        type: categorical
+
+    measures:
+      - name: peak_utilization
+        description: "Maximum outbound utilization percentage."
+        agg: max
+        expr: peak_utilization_pct_out
+      - name: total_errors
+        agg: sum
+        expr: total_errors

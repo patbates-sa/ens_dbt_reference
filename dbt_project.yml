@@ -1,0 +1,36 @@
+name: 'ens_sandbox'
+version: '1.0.0'
+profile: 'ens_sandbox'
+
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+
+vars:
+  # The notebook had LOOKBACK_HOURS = 1 as a Python literal with a comment
+  # saying someone changed it to 2 and changed it back. Now it is a var,
+  # in version control, changeable live in front of the customer.
+  precursor_lookback_hours: 1
+
+  # The notebook had SEVERITY_FILTER = ["S1", "S2"] inline.
+  incident_severities: ['S1', 'S2']
+
+  # Minimum acceptable CI resolution rate. The corrected five-tier resolver
+  # lands at 86.00% against generated data.
+  min_ci_resolution_rate: 0.80
+
+models:
+  ens_sandbox:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts
+
+snapshots:
+  ens_sandbox:
+    +target_schema: snapshots

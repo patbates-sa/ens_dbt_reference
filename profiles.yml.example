@@ -1,0 +1,34 @@
+# Copy to ~/.dbt/profiles.yml (merge if the file already exists).
+# The profile name must match `profile:` in dbt_project.yml -> ens_sandbox
+
+ens_sandbox:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+
+      # From Snowsight: bottom-left account menu -> Account -> View account details.
+      # Format is usually <orgname>-<account_name>.
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+
+      # SSO (likely, if dbt Labs Snowflake is behind Okta):
+      authenticator: externalbrowser
+      # Password instead of SSO -- comment out authenticator above and use:
+      # password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      # Key pair instead:
+      # private_key_path: ~/.ssh/snowflake_key.p8
+      # private_key_passphrase: "{{ env_var('SNOWFLAKE_KEY_PASSPHRASE') }}"
+
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'SYSADMIN') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
+
+      database: ENS_SANDBOX
+
+      # Models write to <schema>_staging / _intermediate / _marts because
+      # dbt_project.yml sets +schema per folder. DEV keeps them out of RAW.
+      schema: DEV
+
+      threads: 8
+      client_session_keep_alive: false
+      query_tag: ens_demo

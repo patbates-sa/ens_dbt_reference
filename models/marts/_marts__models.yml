@@ -1,0 +1,83 @@
+version: 2
+
+models:
+  - name: dim_device
+    description: >
+      Device dimension enriched with site attributes and interface counts.
+      is_monitored_device explains why joins from inventory to telemetry
+      legitimately lose rows.
+    columns:
+      - name: device_id
+        tests: [unique, not_null]
+      - name: hostname
+        tests: [unique, not_null]
+      - name: site_region
+        tests: [not_null]
+      - name: monitored_interface_count
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+  - name: fct_interface_performance_hourly
+    description: >
+      Hourly interface performance with device and site context. Incremental,
+      built on the hourly rollup rather than raw five-minute telemetry.
+    columns:
+      - name: interface_id
+        tests: [not_null]
+      - name: metric_hour
+        tests: [not_null]
+      - name: peak_utilization_pct_out
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+      - name: device_id
+        tests:
+          - relationships:
+              to: ref('dim_device')
+              field: device_id
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [interface_id, metric_hour]
+
+  - name: fct_incident_telemetry_correlation
+    description: >
+      One row per in-scope, CI-resolved incident, with telemetry, syslog and
+      change-window context from the configured lookback window before it
+      opened. This is the model that replaces the hand-built stitch.
+    columns:
+      - name: incident_number
+        description: "Grain."
+        tests: [unique, not_null]
+      - name: device_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_device')
+              field: device_id
+      - name: opened_ts
+        tests: [not_null]
+      - name: peak_util_out_prior_window
+        description: >
+          Null is legitimate: the device may have no monitored interfaces.
+          The notebook could not distinguish that from a broken join.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+      - name: worst_severity_prior_window
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 7
+              inclusive: true
+      - name: match_method
+        tests:
+          - accepted_values:
+              values: ['exact', 'fqdn', 'asset_tag', 'embedded', 'description']
+      - name: opened_during_change_window
+        tests: [not_null]
