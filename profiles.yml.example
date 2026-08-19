@@ -1,7 +1,7 @@
 # Copy to ~/.dbt/profiles.yml (merge if the file already exists).
-# The profile name must match `profile:` in dbt_project.yml -> ens_sandbox
+# The profile name must match `profile:` in dbt_project.yml -> ens_dbt_reference
 
-ens_sandbox:
+ens_dbt_reference:
   target: dev
   outputs:
     dev:
