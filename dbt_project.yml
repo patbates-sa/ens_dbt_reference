@@ -1,6 +1,6 @@
-name: 'ens_sandbox'
+name: 'ens_dbt_reference'
 version: '1.0.0'
-profile: 'ens_sandbox'
+profile: 'ens_dbt_reference'
 
 model-paths: ["models"]
 snapshot-paths: ["snapshots"]
@@ -20,7 +20,7 @@ vars:
   min_ci_resolution_rate: 0.80
 
 models:
-  ens_sandbox:
+  ens_dbt_reference:
     staging:
       +materialized: view
       +schema: staging
