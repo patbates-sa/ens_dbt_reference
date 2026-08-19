@@ -31,8 +31,5 @@ models:
       +materialized: table
       +schema: marts
 
-snapshots:
-  ens_sandbox:
-    +target_schema: snapshots
 flags:
   require_generic_test_arguments_property: true
