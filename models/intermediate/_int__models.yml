@@ -26,6 +26,38 @@ models:
               arguments:
                 values: ['exact', 'fqdn', 'asset_tag', 'embedded', 'description', 'unresolved']
 
+  # DBT-21: incident grain for the weekly site reliability report.
+  - name: int_ens__incident_device_attributed
+    description: >
+      One row per incident that int_ens__ci_resolved could attribute to a device,
+      across every severity, with the change-window overlap resolved.
+      fct_incident_telemetry_correlation answers the same question for
+      var('incident_severities') only; the weekly site report needs the full
+      severity mix so it can report total incidents and the S1/S2 subset side by
+      side. Incidents with no device attribution are dropped here, which is why
+      the row count is below stg_ens__incident.
+    columns:
+      - name: incident_number
+        description: "Grain. Device-attributed incidents only."
+        tests: [unique, not_null]
+      - name: device_id
+        description: "Never null. Unattributed incidents are excluded, not passed through."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ens__device')
+                field: device_id
+      - name: opened_week_start_date
+        description: "Monday of the week the incident opened, from the week_start_monday macro."
+        tests: [not_null]
+      - name: is_high_severity
+        description: "Incident severity is in var('incident_severities'), i.e. S1 or S2."
+        tests: [not_null]
+      - name: opened_during_change_window
+        description: "Incident opened inside an active change window on its device. False, never null."
+        tests: [not_null]
+
   - name: int_ens__interface_metric_hourly
     description: >
       Hourly rollup of five-minute interface telemetry, incremental with a
