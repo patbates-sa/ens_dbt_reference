@@ -2,82 +2,239 @@ version: 2
 
 models:
   - name: dim_device
-    description: >
-      Device dimension enriched with site attributes and interface counts.
-      is_monitored_device explains why joins from inventory to telemetry
-      legitimately lose rows.
+    description: >-
+      Device dimension enriched with site attributes and interface counts. is_monitored_device explains why joins from inventory to telemetry legitimately lose rows.
+       Device dimension. Joins to incidents and interface performance.
     columns:
       - name: device_id
         tests: [unique, not_null]
+        entity:
+          type: primary
+          name: device
       - name: hostname
         tests: [unique, not_null]
       - name: site_region
         tests: [not_null]
+        dimension:
+          type: categorical
       - name: monitored_interface_count
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              inclusive: true
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: device_class
+        dimension:
+          type: categorical
+      - name: vendor
+        dimension:
+          type: categorical
+      - name: owning_team
+        dimension:
+          type: categorical
+      - name: environment
+        dimension:
+          type: categorical
+      - name: site_code
+        dimension:
+          type: categorical
+      - name: install_date
+        granularity: day
+        dimension:
+          type: time
+          name: installed_at
+    semantic_model:
+      enabled: true
+      name: dim_device
+    agg_time_dimension: installed_at
+    metrics:
 
+      - name: device_count
+        agg: count_distinct
+        expr: device_id
+
+        type: simple
+        hidden: true
   - name: fct_interface_performance_hourly
-    description: >
-      Hourly interface performance with device and site context. Incremental,
-      built on the hourly rollup rather than raw five-minute telemetry.
+    description: >-
+      Hourly interface performance with device and site context. Incremental, built on the hourly rollup rather than raw five-minute telemetry.
+       Hourly interface performance.
     columns:
       - name: interface_id
         tests: [not_null]
+        entity:
+          type: primary
+          name: interface
       - name: metric_hour
         tests: [not_null]
+        dimension:
+          type: time
+          name: metric_hour_ts
+        granularity: hour
       - name: peak_utilization_pct_out
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 100
-              inclusive: true
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
       - name: device_id
         tests:
           - relationships:
-              to: ref('dim_device')
-              field: device_id
+              arguments:
+                to: ref('dim_device')
+                field: device_id
+        entity:
+          type: foreign
+          name: device
+      - name: device_class
+        dimension:
+          type: categorical
+      - name: owning_team
+        dimension:
+          type: categorical
+      - name: site_region
+        dimension:
+          type: categorical
     tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [interface_id, metric_hour]
+          arguments:
+            combination_of_columns: [interface_id, metric_hour]
 
+    semantic_model:
+      enabled: true
+      name: fct_interface_performance_hourly
+    agg_time_dimension: metric_hour_ts
+    metrics:
+      - name: peak_utilization
+        label: "Peak utilization %"
+        description: "Maximum outbound interface utilization over the selected window."
+        type: simple
+        agg: max
+        expr: peak_utilization_pct_out
+      - name: total_errors
+        agg: sum
+        expr: total_errors
+        type: simple
+        hidden: true
   - name: fct_incident_telemetry_correlation
-    description: >
-      One row per in-scope, CI-resolved incident, with telemetry, syslog and
-      change-window context from the configured lookback window before it
-      opened. This is the model that replaces the hand-built stitch.
+    description: >-
+      One row per in-scope, CI-resolved incident, with telemetry, syslog and change-window context from the configured lookback window before it opened. This is the model that replaces the hand-built stitch.
+       Incident grain with telemetry and change-window context.
     columns:
       - name: incident_number
         description: "Grain."
         tests: [unique, not_null]
+        entity:
+          type: primary
+          name: incident
       - name: device_id
         tests:
           - not_null
           - relationships:
-              to: ref('dim_device')
-              field: device_id
+              arguments:
+                to: ref('dim_device')
+                field: device_id
+        entity:
+          type: foreign
+          name: device
       - name: opened_ts
         tests: [not_null]
+        dimension:
+          type: time
+          name: opened_at
+        granularity: day
       - name: peak_util_out_prior_window
         description: >
           Null is legitimate: the device may have no monitored interfaces.
           The notebook could not distinguish that from a broken join.
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 100
-              inclusive: true
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
       - name: worst_severity_prior_window
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 7
-              inclusive: true
+              arguments:
+                min_value: 0
+                max_value: 7
+                inclusive: true
       - name: match_method
         tests:
           - accepted_values:
-              values: ['exact', 'fqdn', 'asset_tag', 'embedded', 'description']
+              arguments:
+                values: ['exact', 'fqdn', 'asset_tag', 'embedded', 'description']
+        dimension:
+          type: categorical
       - name: opened_during_change_window
         tests: [not_null]
+        dimension:
+          type: categorical
+      - name: incident_severity
+        dimension:
+          type: categorical
+      - name: assignment_group
+        dimension:
+          type: categorical
+      - name: had_elevated_utilization
+        dimension:
+          type: categorical
+    semantic_model:
+      enabled: true
+      name: fct_incident_telemetry_correlation
+    agg_time_dimension: opened_at
+    metrics:
+      - name: incident_count
+        label: "Incidents"
+        description: "Count of incidents, sliceable by severity, assignment group, site, region and device class."
+        type: simple
+        agg: count
+        expr: incident_number
+      - name: resolved_incident_count
+        description: "Incidents with a resolved timestamp."
+        agg: count
+        expr: case when not is_open then incident_number end
+
+        type: simple
+        hidden: true
+      - name: total_minutes_to_resolve
+        description: "Sum of resolution time in minutes, resolved incidents only."
+        agg: sum
+        expr: coalesce(minutes_to_resolve, 0)
+
+        type: simple
+        hidden: true
+      - name: incidents_during_change_window
+        description: "Incidents that opened inside an active change window."
+        agg: sum
+        expr: case when opened_during_change_window then 1 else 0 end
+
+        type: simple
+        hidden: true
+      - name: mean_time_to_resolve
+        label: "Mean time to resolve (minutes)"
+        description: "Average resolution time in minutes across resolved incidents."
+        type: ratio
+        numerator: total_minutes_to_resolve
+        denominator: resolved_incident_count
+      - name: pct_incidents_during_change_window
+        label: "% incidents during a change window"
+        description: >
+          Share of incidents that opened inside an active change window. The
+          one-line answer to a question the organisation asks constantly.
+        type: ratio
+        numerator: incidents_during_change_window
+        denominator: incident_count
+
+
+  - name: time_spine_hourly
+    description: Hourly time spine covering five years back through 30 days ahead.
+    time_spine:
+      standard_granularity_column: date_hour
+    columns:
+      - name: date_hour
+        description: Standard hourly join key for MetricFlow time-based queries.
+        granularity: hour
+        tests: [unique, not_null]
