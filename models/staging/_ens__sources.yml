@@ -10,23 +10,18 @@ sources:
       derives from Morgan Stanley data.
 
     # Freshness is on the two tables that would page someone if they went stale.
-    freshness:
-      warn_after: {count: 12, period: hour}
-      error_after: {count: 24, period: hour}
-    loaded_at_field: null
-
     tables:
       - name: ens_site
         description: "Site dimension, ~90 rows. One row per physical location."
-        freshness: null
         columns:
           - name: site_code
             description: "Primary key."
             tests: [unique, not_null]
 
+        config:
+          freshness:
       - name: ens_device
         description: "Device inventory, ~1,200 rows. The dimensional backbone."
-        freshness: null
         columns:
           - name: device_id
             description: "Surrogate key, e.g. DEV-004821."
@@ -37,37 +32,39 @@ sources:
           - name: site_code
             tests:
               - relationships:
-                  to: source('ens', 'ens_site')
-                  field: site_code
-
+                  arguments:
+                    to: source('ens', 'ens_site')
+                    field: site_code
+        config:
+          freshness:
       - name: ens_interface
         description: "~13,800 interfaces, roughly 12 per device. Only ~2,400 are monitored."
-        freshness: null
         columns:
           - name: interface_id
             tests: [unique, not_null]
           - name: device_id
             tests: [not_null]
 
+        config:
+          freshness:
       - name: ens_interface_metric_5m
         description: >
           ~9.7M rows. One row per monitored interface per five minutes over 14 days.
           This is the volume table and the reason a full rebuild is visibly wasteful.
-        loaded_at_field: metric_ts
-
+        config:
+          loaded_at_field: metric_ts
       - name: ens_device_health_5m
         description: "~4.8M rows. Device-level CPU, memory, temperature, uptime, BGP state."
-        loaded_at_field: metric_ts
-
+        config:
+          loaded_at_field: metric_ts
       - name: ens_syslog_event
         description: "~1.2M events over 90 days. Severity 0-7 with Cisco-style mnemonics."
-        loaded_at_field: event_ts
-
+        config:
+          loaded_at_field: event_ts
       - name: ens_incident
         description: >
           ~4,800 ServiceNow-shaped incidents over 12 months. cmdb_ci is deliberately
           inconsistent across five resolvable patterns plus an unresolvable bucket.
-        freshness: null
         columns:
           - name: incident_number
             tests: [unique, not_null]
@@ -77,18 +74,27 @@ sources:
               FQDN (~12%), site-prefixed asset tag (~8%), null with the device named
               only in short_description (~8%), and genuinely unresolvable (~15%).
 
+        config:
+          freshness:
       - name: ens_change_request
         description: "~2,600 change records over 12 months. Second interval join."
-        freshness: null
         columns:
           - name: change_number
             tests: [unique, not_null]
 
+        config:
+          freshness:
       - name: ens_jira_issue
         description: >
           ~3,100 Jira issues. Separate from ServiceNow on purpose because the customer
           named both. This is the table the ticket-driven automation writes against.
-        freshness: null
         columns:
           - name: issue_key
             tests: [unique, not_null]
+        config:
+          freshness:
+    config:
+      freshness:
+        warn_after: {count: 12, period: hour}
+        error_after: {count: 24, period: hour}
+      loaded_at_field:

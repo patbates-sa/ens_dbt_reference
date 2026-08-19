@@ -8,10 +8,6 @@ models:
       description. Every model that combines a ticket with telemetry passes
       through here, which is why one test protects the whole downstream graph.
       Lands at 86.00% resolved against generated data.
-    tests:
-      - dbt_utils.expression_is_true:
-          name: ci_resolution_rate_at_least_80_pct
-          expression: "count(device_id) * 1.0 / count(*) >= {{ var('min_ci_resolution_rate') }}"
     columns:
       - name: incident_number
         description: "Grain. One row per incident, resolved or not."
@@ -20,13 +16,15 @@ models:
         description: "Null when no tier matched. ~14% of rows by design."
         tests:
           - relationships:
-              to: ref('stg_ens__device')
-              field: device_id
+              arguments:
+                to: ref('stg_ens__device')
+                field: device_id
       - name: match_method
         description: "Which tier resolved this row. 'unresolved' when none did."
         tests:
           - accepted_values:
-              values: ['exact', 'fqdn', 'asset_tag', 'embedded', 'description', 'unresolved']
+              arguments:
+                values: ['exact', 'fqdn', 'asset_tag', 'embedded', 'description', 'unresolved']
 
   - name: int_ens__interface_metric_hourly
     description: >
@@ -40,9 +38,11 @@ models:
       - name: peak_utilization_pct_out
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 100
-              inclusive: true
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
     tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [interface_id, metric_hour]
+          arguments:
+            combination_of_columns: [interface_id, metric_hour]

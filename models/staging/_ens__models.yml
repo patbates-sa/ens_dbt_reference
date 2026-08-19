@@ -20,9 +20,9 @@ models:
       - name: site_code
         tests:
           - relationships:
-              to: ref('stg_ens__site')
-              field: site_code
-
+              arguments:
+                to: ref('stg_ens__site')
+                field: site_code
   - name: stg_ens__interface
     description: "One row per interface. interface_description nullified when blank."
     columns:
@@ -32,8 +32,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_ens__device')
-              field: device_id
+              arguments:
+                to: ref('stg_ens__device')
+                field: device_id
       - name: is_monitored
         description: "Only ~2,400 of ~13,800 interfaces are monitored, which is why telemetry is narrower than inventory."
         tests: [not_null]
@@ -48,13 +49,15 @@ models:
       - name: utilization_pct_out
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 100
-              inclusive: true
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
       - name: poll_status
         tests:
           - accepted_values:
-              values: ['ok', 'timeout', 'partial']
+              arguments:
+                values: ['ok', 'timeout', 'partial']
 
   - name: stg_ens__device_health_5m
     description: "Five-minute device health telemetry. ~4.8M rows."
@@ -70,10 +73,10 @@ models:
       - name: syslog_severity
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 7
-              inclusive: true
-
+              arguments:
+                min_value: 0
+                max_value: 7
+                inclusive: true
   - name: stg_ens__incident
     description: >
       ServiceNow-shaped incidents. cmdb_ci_raw is preserved and cmdb_ci_clean is
@@ -86,7 +89,8 @@ models:
       - name: incident_severity
         tests:
           - accepted_values:
-              values: ['S1', 'S2', 'S3', 'S4']
+              arguments:
+                values: ['S1', 'S2', 'S3', 'S4']
 
   - name: stg_ens__change_request
     description: >
@@ -98,7 +102,8 @@ models:
       - name: change_outcome
         tests:
           - accepted_values:
-              values: ['successful', 'backed_out', 'failed']
+              arguments:
+                values: ['successful', 'backed_out', 'failed']
 
   - name: stg_ens__jira_issue
     description: "Jira issues. Links to incidents, not to devices."
