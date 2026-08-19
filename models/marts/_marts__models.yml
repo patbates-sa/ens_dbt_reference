@@ -229,6 +229,233 @@ models:
         denominator: incident_count
 
 
+  # DBT-21: the Monday regional review slide, as a governed table.
+  - name: fct_site_reliability_weekly
+    description: >-
+      One row per site per week, weeks starting Monday. Replaces the hand-built
+      regional review slide: incident volume and its S1/S2 subset, change-window
+      overlap, mean time to resolve, outbound utilization, and in-service device
+      count for normalisation.
+
+
+      Dense by construction. Every site appears in every week in the reporting
+      range, so a quiet week reads as zero rather than as a missing row.
+
+
+      Scope, and the two things worth reading before reconciling this table
+      against anything else:
+
+
+      1. Incidents that cannot be attributed to a device are out of scope. An
+      incident with no device has no site, so it cannot be placed in a site-week.
+      int_ens__ci_resolved attributes roughly 86% of incidents; the remainder is
+      absent from this table by design. Totals here will not match the raw
+      ServiceNow incident count, and that is not a bug.
+
+
+      2. Telemetry retention is shorter than incident history. The utilization
+      columns are null for weeks older than retention. has_telemetry states that
+      as a column so "not measured" is distinguishable from "measured and low"
+      without reading this description.
+
+
+      Device counts are current inventory applied to every week, not as-of-week.
+      ens_device_snapshot only began accumulating history at its first run, so an
+      as-of-week count would report zero devices for every week already in this
+      table.
+    columns:
+      - name: site_code
+        description: "Grain, with week_start_date."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ens__site')
+                field: site_code
+        entity:
+          type: foreign
+          name: site
+      - name: week_start_date
+        description: "Monday of the reporting week. Grain, with site_code."
+        tests: [not_null]
+        dimension:
+          type: time
+          name: week_start
+        granularity: week
+      - name: week_end_date
+        description: "Sunday of the reporting week. Inclusive."
+        tests: [not_null]
+      - name: is_partial_week
+        description: >
+          The first and last weeks of the range are clipped by data availability.
+          Flagged so a short week is not read as a quiet one.
+        tests: [not_null]
+        dimension:
+          type: categorical
+      - name: site_region
+        tests: [not_null]
+        dimension:
+          type: categorical
+      - name: site_tier
+        dimension:
+          type: categorical
+      - name: site_country
+        dimension:
+          type: categorical
+      - name: in_service_device_count
+        description: >
+          Devices at the site with lifecycle_state = 'in_service'. The
+          denominator that stops a 200-device site being compared to a
+          six-device site on raw counts. Current inventory, not as-of-week.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: incidents_opened
+        description: "Device-attributed incidents opened in the week, all severities. Zero, never null."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: high_severity_incidents_opened
+        description: "The S1/S2 subset of incidents_opened, per var('incident_severities')."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: incidents_during_change_window
+        description: "Incidents that opened inside an active change window on their device."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: pct_incidents_during_change_window
+        description: >
+          Change-window share of the week's incidents. Null, not zero, when the
+          week had no incidents: there was nothing to measure, and 0% reads as a
+          finding.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
+      - name: avg_minutes_to_resolve
+        description: >
+          Mean resolution time across incidents opened in the week that have
+          since resolved. Null when the week resolved nothing.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: peak_utilization_pct_out
+        description: >
+          Highest outbound utilization seen on any monitored interface at the
+          site during the week. Null when has_telemetry is false.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
+      - name: avg_utilization_pct_out
+        description: >
+          Mean outbound utilization across the site's monitored interface-hours
+          in the week. Null when has_telemetry is false.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
+      - name: has_telemetry
+        description: >
+          False means no interface telemetry exists for this site-week, which is
+          expected outside the retention window. Distinguishes "no telemetry"
+          from "low utilization".
+        tests: [not_null]
+        dimension:
+          type: categorical
+      - name: incidents_per_100_in_service_devices
+        description: "incidents_opened normalised by site size. Null when the site has no in-service devices."
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [site_code, week_start_date]
+
+    semantic_model:
+      enabled: true
+      name: fct_site_reliability_weekly
+    agg_time_dimension: week_start
+    metrics:
+      - name: site_week_incident_count
+        label: "Site incidents"
+        description: "Device-attributed incidents, sliceable by region, tier and site."
+        type: simple
+        agg: sum
+        expr: incidents_opened
+      - name: site_week_high_severity_incident_count
+        label: "Site S1/S2 incidents"
+        description: "The S1/S2 subset of site incidents."
+        type: simple
+        agg: sum
+        expr: high_severity_incidents_opened
+      - name: site_week_incidents_during_change_window
+        description: "Incidents that opened inside an active change window."
+        type: simple
+        agg: sum
+        expr: incidents_during_change_window
+        hidden: true
+      - name: site_week_resolved_incident_count
+        description: "Incidents opened in the week that have since resolved."
+        type: simple
+        agg: sum
+        expr: resolved_incidents
+        hidden: true
+      - name: site_week_total_minutes_to_resolve
+        description: "Sum of resolution time in minutes, resolved incidents only."
+        type: simple
+        agg: sum
+        expr: total_minutes_to_resolve
+        hidden: true
+      - name: site_week_mean_time_to_resolve
+        label: "Site mean time to resolve (minutes)"
+        description: >
+          Average resolution time in minutes. Built from the summed numerator and
+          denominator so it re-aggregates correctly above the week grain.
+        type: ratio
+        numerator: site_week_total_minutes_to_resolve
+        denominator: site_week_resolved_incident_count
+      - name: site_week_pct_incidents_during_change_window
+        label: "% site incidents during a change window"
+        description: >
+          Change-window share of incidents. Re-aggregates from counts, so a
+          region-level or quarter-level figure is a true share and not an average
+          of percentages.
+        type: ratio
+        numerator: site_week_incidents_during_change_window
+        denominator: site_week_incident_count
+      - name: site_week_peak_utilization
+        label: "Site peak utilization %"
+        description: "Highest outbound utilization on any monitored interface at the site."
+        type: simple
+        agg: max
+        expr: peak_utilization_pct_out
+
   - name: time_spine_hourly
     description: Hourly time spine covering five years back through 30 days ahead.
     time_spine:

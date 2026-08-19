@@ -8,4 +8,8 @@ __pycache__/
 .DS_Store
 dbt_internal_packages/
 CLAUDE.md
+<<<<<<< HEAD
+.jira/.gitignore
+=======
 .jira/DBT-21.md
+>>>>>>> 77de9c5c92934d9d22f1e3eeccb5eeb09ad258e5
